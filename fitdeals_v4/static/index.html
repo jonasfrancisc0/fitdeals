@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FitDeals V4</title>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;background:#f4f6f8;margin:0;color:#17202a}
+header{background:#111827;color:#fff;padding:22px}
+main{max-width:1100px;margin:24px auto;padding:0 16px}
+.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:18px;box-shadow:0 2px 12px #0001}
+button{border:0;border-radius:9px;padding:10px 14px;cursor:pointer;background:#111827;color:#fff}
+button.secondary{background:#e5e7eb;color:#111827}
+input{padding:10px;border:1px solid #d1d5db;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.offer{border:1px solid #e5e7eb;border-radius:12px;padding:14px}
+.price{font-size:20px;font-weight:700}
+.badge{display:inline-block;padding:4px 8px;border-radius:99px;background:#dcfce7;color:#166534;font-size:12px}
+pre{white-space:pre-wrap;background:#111827;color:#fff;padding:12px;border-radius:10px}
+small{color:#6b7280}
+</style>
+</head>
+<body>
+<header>
+  <strong>🚀 FitDeals V4</strong>
+  <div><small style="color:#d1d5db">Painel de ofertas e integração Mercado Livre</small></div>
+</header>
+<main>
+  <div class="card">
+    <h2>Acesso</h2>
+    <input id="key" type="password" placeholder="Chave do painel">
+    <button onclick="login()">Entrar</button>
+    <span id="status"></span>
+  </div>
+
+  <div id="panel" style="display:none">
+    <div class="card">
+      <h2>Mercado Livre</h2>
+      <button onclick="connectML()">🔗 Conectar Mercado Livre</button>
+      <button class="secondary" onclick="loadData()">Atualizar</button>
+      <button class="secondary" onclick="collect()">🔎 Coletar ofertas agora</button>
+      <p id="mlstatus"></p>
+    </div>
+
+    <div class="card">
+      <h2>Ofertas</h2>
+      <div id="offers" class="grid"></div>
+    </div>
+
+    <div class="card">
+      <h2>Últimas publicações</h2>
+      <div id="pubs"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+let adminKey="";
+function headers(){return {"X-Admin-Key":adminKey};}
+
+async function login(){
+  adminKey=document.getElementById("key").value;
+  const r=await fetch("/api/dashboard",{headers:headers()});
+  if(!r.ok){document.getElementById("status").textContent=" ❌ Chave inválida";return;}
+  document.getElementById("status").textContent=" ✅ Acesso liberado";
+  document.getElementById("panel").style.display="block";
+  loadData();
+}
+
+function connectML(){window.location.href="/auth/mercadolivre";}
+
+async function collect(){
+  const r=await fetch("/api/collect",{method:"POST",headers:headers()});
+  const d=await r.json();
+  alert(r.ok ? `Coleta concluída: ${d.count} ofertas.` : (d.detail||"Erro"));
+  loadData();
+}
+
+async function loadData(){
+  const r=await fetch("/api/dashboard",{headers:headers()});
+  if(!r.ok)return;
+  const d=await r.json();
+
+  document.getElementById("mlstatus").textContent =
+    d.connected ? "🟢 Mercado Livre conectado" : "🟡 Mercado Livre ainda não conectado";
+
+  document.getElementById("offers").innerHTML=d.offers.map(o=>`
+    <div class="offer">
+      <span class="badge">${Number(o.discount||0).toFixed(0)}% OFF</span>
+      <h3>${escapeHtml(o.title)}</h3>
+      <div class="price">R$ ${Number(o.price||0).toFixed(2).replace(".",",")}</div>
+      ${o.original_price?`<small>Antes: R$ ${Number(o.original_price).toFixed(2).replace(".",",")}</small>`:""}
+      <p><button onclick="message(${o.id})">📋 Gerar mensagem</button></p>
+      <small>${escapeHtml(o.item_id||"")}</small>
+    </div>`).join("") || "<p>Nenhuma oferta encontrada ainda.</p>";
+
+  document.getElementById("pubs").innerHTML=d.publications.map(p=>`
+    <div class="offer"><b>${escapeHtml(p.title||"Oferta")}</b><br>
+    <small>${escapeHtml(p.created_at||"")} · ${escapeHtml(p.status||"")}</small></div>`
+  ).join("") || "<p>Nenhuma publicação registrada.</p>";
+}
+
+async function message(id){
+  const r=await fetch(`/api/offer/${id}/message`,{headers:headers()});
+  const d=await r.json();
+  if(!r.ok){alert(d.detail||"Erro");return;}
+  const text=d.message;
+  try{await navigator.clipboard.writeText(text);alert("Mensagem copiada!");}
+  catch(e){prompt("Copie a mensagem:",text);}
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+}
+</script>
+</body>
+</html>
