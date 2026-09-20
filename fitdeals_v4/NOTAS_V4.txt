@@ -1,8 +1,0 @@
-FITDEALS V4 - LEIA PRIMEIRO
-
-1) Descompacte esta pasta.
-2) Rode start_windows.bat OU siga o README.md.
-3) Configure .env.
-4) Para OAuth do Mercado Livre, ML_REDIRECT_URI precisa ser HTTPS e exatamente igual ao cadastrado no DevCenter.
-5) Se usar PKCE no DevCenter, mantenha ML_USE_PKCE=true.
-6) Nunca envie Client Secret, access token ou refresh token para ninguém.
