@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FitDeals V6</title>
+<style>
+body{font-family:Inter,Segoe UI,Arial,sans-serif;background:#f4f6f8;margin:0;color:#17202a}
+header{background:#111827;color:#fff;padding:24px 18px}
+main{max-width:1180px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:18px;box-shadow:0 3px 16px #00000010}
+button{padding:10px 14px;border:0;border-radius:10px;background:#111827;color:#fff;cursor:pointer;margin:3px}
+button.alt{background:#e5e7eb;color:#111827}
+button.green{background:#166534}
+input{padding:11px;border:1px solid #ccd2d8;border-radius:9px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.offer{border:1px solid #e0e4e8;border-radius:14px;padding:14px;background:#fff}
+.badge{display:inline-block;background:#dcfce7;color:#166534;border-radius:20px;padding:5px 9px;font-size:12px;font-weight:700}
+.badge.gray{background:#eef2f7;color:#475569}
+pre{background:#111827;color:#e5e7eb;padding:14px;white-space:pre-wrap;border-radius:10px;overflow:auto}
+.small{font-size:12px;color:#6b7280}
+.stat{font-size:22px;font-weight:700}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.err{color:#b91c1c}
+.ok{color:#166534}
+</style>
+</head>
+<body>
+<header><h2>🚀 FitDeals V6</h2><div>Busca real de produtos + preço vencedor do Mercado Livre + diagnóstico</div></header>
+<main>
+<div class="card">
+  <div class="row">
+    <input id="key" type="password" placeholder="Chave do painel" autocomplete="current-password">
+    <button onclick="login()">Entrar</button>
+    <span id="lg"></span>
+  </div>
+  <div class="small">Use a mesma ADMIN_PASSWORD configurada no Render.</div>
+</div>
+<section id="panel" style="display:none">
+  <div class="card">
+    <h2>Mercado Livre</h2>
+    <div class="row">
+      <button onclick="connect()">🔗 Conectar Mercado Livre</button>
+      <button class="green" onclick="collect()">🔎 Buscar ofertas agora</button>
+      <button class="alt" onclick="testSearch()">🧪 Testar busca</button>
+      <button class="alt" onclick="load()">↻ Atualizar</button>
+    </div>
+    <p id="st"></p>
+    <div class="row">
+      <div><div class="small">Candidatos</div><div id="candidates" class="stat">-</div></div>
+      <div><div class="small">Consultas de preço</div><div id="pricecalls" class="stat">-</div></div>
+      <div><div class="small">Ofertas encontradas</div><div id="found" class="stat">-</div></div>
+    </div>
+    <pre id="diag" style="display:none"></pre>
+  </div>
+  <div class="card"><h2>Teste rápido</h2><input id="q" value="creatina"><button class="alt" onclick="testSearch()">Testar</button><pre id="testout" style="display:none"></pre></div>
+  <div class="card"><h2>Ofertas</h2><div id="offers" class="grid"></div></div>
+</section>
+</main>
+<script>
+let k=localStorage.getItem('fitdeals_key')||'';
+const H=()=>({'X-Admin-Key':k});
+const $=id=>document.getElementById(id);
+function connect(){location.href='/auth/mercadolivre'}
+async function login(){
+  k=$('key').value.trim(); localStorage.setItem('fitdeals_key',k);
+  const r=await fetch('/api/dashboard',{headers:H()});
+  if(!r.ok){$('lg').textContent=' ❌ Chave inválida';$('panel').style.display='none';return}
+  $('lg').textContent=' ✅';$('panel').style.display='block';render(await r.json());
+}
+async function load(){
+  const r=await fetch('/api/dashboard',{headers:H()});if(!r.ok)return;
+  render(await r.json());
+}
+function render(d){
+  const c=d.connection||{};
+  $('st').innerHTML=c.connected?`<span class="ok">🟢 Conectado como ${esc(c.nickname||c.user_id||'usuário')}</span>`:`<span class="err">🔴 Não conectado: ${esc(c.reason||'verifique o OAuth')}</span>`;
+  const run=d.last_run;
+  if(run){
+    const dg=run.diagnostics||{};
+    $('candidates').textContent=dg.unique_candidates??run.candidates??0;
+    $('pricecalls').textContent=dg.price_calls??run.price_calls??0;
+    $('found').textContent=dg.offers_found??run.offers_found??0;
+  }
+  $('offers').innerHTML=(d.offers||[]).map(o=>{
+    const disc=Number(o.discount||0), badge=disc>0?`<span class="badge">${disc.toFixed(0)}% OFF</span>`:`<span class="badge gray">Preço sem desconto identificado</span>`;
+    return `<div class="offer">${badge}<h3>${esc(o.title)}</h3><div><b>R$ ${Number(o.price||0).toFixed(2).replace('.',',')}</b>${o.original_price?` <span class="small">antes R$ ${Number(o.original_price).toFixed(2).replace('.',',')}</span>`:''}</div><p class="small">${esc(o.price_source||'')} • ${esc(o.price_type||'')}</p><p><button onclick="msg(${o.id})">📋 Copiar mensagem</button> <a href="${attr(o.permalink)}" target="_blank" rel="noopener">Abrir</a></p><div class="small">${esc(o.item_id)}</div></div>`
+  }).join('')||'<p>Nenhuma oferta salva ainda. Clique em Buscar ofertas agora.</p>';
+}
+async function collect(){
+  $('diag').style.display='block';$('diag').textContent='Consultando Mercado Livre...';
+  const r=await fetch('/api/collect',{method:'POST',headers:H()}); const d=await r.json();
+  $('diag').textContent=JSON.stringify(d,null,2); load();
+}
+async function testSearch(){
+  const q=$('q').value.trim()||'creatina'; const r=await fetch('/api/test-search?q='+encodeURIComponent(q),{headers:H()});const d=await r.json();
+  $('testout').style.display='block';$('testout').textContent=JSON.stringify(d,null,2);
+}
+async function msg(id){
+  const r=await fetch('/api/offer/'+id+'/message',{headers:H()}); const d=await r.json();
+  try{await navigator.clipboard.writeText(d.message);alert('Mensagem copiada!')}catch{prompt('Copie a mensagem:',d.message)}
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function attr(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}
+if(k){$('key').value=k;login()}
+</script>
+</body></html>
